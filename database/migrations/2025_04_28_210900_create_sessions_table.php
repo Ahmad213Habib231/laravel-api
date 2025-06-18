@@ -9,17 +9,17 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up()
-    {
-        Schema::create('sessions', function (Blueprint $table) {
-            $table->id();
-            $table->string('session_id')->unique();
-            $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('cascade');
-            $table->text('payload');
-            $table->integer('last_activity');
-            $table->timestamps();
-        });
-    }
+public function up()
+{
+    Schema::create('sessions', function (Blueprint $table) {
+        $table->string('id')->primary(); // session_id as primary key
+        $table->foreignId('user_id')->nullable()->constrained('users')->onDelete('cascade');
+        $table->text('payload');
+        $table->integer('last_activity');
+        $table->timestamps();
+    });
+}
+
     
 
     /**

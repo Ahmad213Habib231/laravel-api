@@ -13,7 +13,9 @@ return new class extends Migration {
             $table->string('first_name');
             $table->string('last_name');
             $table->string('email')->unique();
+            $table->timestamp('email_verified_at')->nullable();
             $table->string('password')->nullable();  // بيكون null لو سجل بجوجل أو فيسبوك
+            $table->rememberToken();
             $table->string('provider')->nullable();  // google أو facebook
             $table->string('provider_id')->nullable(); // ID من جوجل أو فيسبوك
             $table->string('otp')->nullable();
