@@ -4,5 +4,4 @@ numpy
 pandas
 flask
 ultralytics
-numpy
-torch
+
