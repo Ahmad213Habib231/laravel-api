@@ -6,9 +6,11 @@ apt-get update
 # تثبيت Python 3 و pip3
 apt-get install -y python3 python3-pip
 
-# تثبيت مكتبات البايثون المطلوبة (غير المكتبات دي حسب مشروعك)
-pip3 install -r requirements.txt
+# اعطاء صلاحية تنفيذ لبايثون (لتجنب Permission denied)
+chmod +x $(which python3)
 
+# تثبيت مكتبات البايثون المطلوبة
+pip3 install -r requirements.txt
 
 # تثبيت مكتبات PHP
 composer install --no-dev --optimize-autoloader
