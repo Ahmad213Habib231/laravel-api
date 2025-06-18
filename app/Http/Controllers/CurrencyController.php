@@ -39,6 +39,7 @@ class CurrencyController extends Controller
         $currency->image = $imageName;
         $currency->image_path = 'uploads/' . $imageName;
         $currency->image_url = $fullUrl;
+        $currency->Country = 'Egypt';
         $currency->save();
 
         $imagePath = storage_path('app/public/uploads/' . $imageName);
