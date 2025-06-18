@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator; 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use App\Models\Currency;
 use App\Models\UserScan;
 
@@ -24,12 +25,14 @@ class CurrencyController extends Controller
             ], 422);
         }
 
-        // حفظ الصورة
+        // حفظ الصورة داخل storage/app/public/uploads
         $img = $request->file('image');
         $ext = $img->getClientOriginalExtension();
         $imageName = time() . '.' . $ext;
-        $img->move(public_path('uploads'), $imageName);
-        $fullUrl = asset('uploads/' . $imageName);
+        $img->storeAs('public/uploads', $imageName);
+
+        // المسار الكامل للصورة في المتصفح
+        $fullUrl = asset('storage/uploads/' . $imageName);
 
         // تخزين بيانات الصورة في DB
         $currency = new Currency;
@@ -38,29 +41,33 @@ class CurrencyController extends Controller
         $currency->image_url = $fullUrl;
         $currency->save();
 
-        $imagePath = public_path($currency->image_path);
+        $imagePath = storage_path('app/public/uploads/' . $imageName);
 
-        // شغل كشف detect
+        // شغل كشف العملة
         $detections = $this->runDetection($imagePath);
 
         // لو المستخدم مسجل دخول سجل عملية الكشف
         if (Auth::check()) {
             $ext = pathinfo($imagePath, PATHINFO_EXTENSION);
             $newImageName = 'user_' . time() . '.' . $ext;
-            $newImagePath = 'uploads/user_scans/' . $newImageName;
+            $newImagePath = 'public/uploads/user_scans/' . $newImageName;
+            $finalUrl = 'storage/uploads/user_scans/' . $newImageName;
 
-            if (!file_exists(public_path('uploads/user_scans'))) {
-                mkdir(public_path('uploads/user_scans'), 0755, true);
+            // إنشاء مجلد user_scans لو مش موجود
+            if (!Storage::exists('public/uploads/user_scans')) {
+                Storage::makeDirectory('public/uploads/user_scans');
             }
 
-            copy($imagePath, public_path($newImagePath));
+            // نسخ الصورة من مكانها إلى مجلد user_scans
+            Storage::copy('public/uploads/' . $imageName, $newImagePath);
 
+            // حفظ البيانات في جدول user_scans
             UserScan::create([
                 'user_id' => Auth::id(),
                 'currency_id' => $currency->id,
                 'recognized_at' => now(),
                 'accuracy' => $detections['accuracy'] ?? 0,
-                'image_url' => $newImagePath,
+                'image_url' => $finalUrl,
                 'result' => $detections['result'] ?? 'unknown',
             ]);
         }
