@@ -85,7 +85,7 @@ class CurrencyController extends Controller
         $modelPath = storage_path('app/model/best.pt');
         $scriptPath = base_path('scripts/detect.py');
 
-        $command = escapeshellcmd("python " . escapeshellarg($scriptPath) . " " . escapeshellarg($imagePath) . " " . escapeshellarg($modelPath));
+        $command = "python3 " . escapeshellarg($scriptPath) . " " . escapeshellarg($imagePath) . " " . escapeshellarg($modelPath) . " 2>&1";
         $output = shell_exec($command);
 
         if ($output === null) {
