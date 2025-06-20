@@ -55,7 +55,7 @@ class CurrencyController extends Controller
         fclose($imageStream);
         unlink($tempImagePath);
 
-        // التأكد أن نتائج الكشف مصفوفة صحيحة
+        // تحقق أن $detections مصفوفة وليست null
         if (!is_array($detections)) {
             $detections = [
                 'status' => false,
