@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('Country');
             $table->string('image')->nullable();
-            $table->string('image_path');
+            $table->string('image_path')->nullable();
             $table->string('image_url')->nullable();
             $table->string('result')->nullable();
             $table->timestamps();
