@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator; 
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 use App\Models\Currency;
 use App\Models\UserScan;
 
@@ -25,89 +25,88 @@ class CurrencyController extends Controller
             ], 422);
         }
 
-        // حفظ الصورة داخل storage/app/public/uploads
+        // حفظ الصورة في public/uploads
         $img = $request->file('image');
         $ext = $img->getClientOriginalExtension();
         $imageName = time() . '.' . $ext;
-        $img->storeAs('public/uploads', $imageName);
-
-        // المسار الكامل للصورة في المتصفح
-        $fullUrl = asset('storage/uploads/' . $imageName);
+        $img->move(public_path('uploads'), $imageName);
+        $fullUrl = asset('uploads/' . $imageName);
 
         // تخزين بيانات الصورة في DB
         $currency = new Currency;
         $currency->image = $imageName;
         $currency->image_path = 'uploads/' . $imageName;
         $currency->image_url = $fullUrl;
-        $currency->Country = 'Egypt';
         $currency->save();
 
-        $imagePath = storage_path('app/public/uploads/' . $imageName);
+        $imagePath = public_path($currency->image_path);
 
-        // شغل كشف العملة
+        // استدعاء Flask API للكشف
         $detections = $this->runDetection($imagePath);
 
         // لو المستخدم مسجل دخول سجل عملية الكشف
         if (Auth::check()) {
             $ext = pathinfo($imagePath, PATHINFO_EXTENSION);
             $newImageName = 'user_' . time() . '.' . $ext;
-            $newImagePath = 'public/uploads/user_scans/' . $newImageName;
-            $finalUrl = 'storage/uploads/user_scans/' . $newImageName;
+            $newImagePath = 'uploads/user_scans/' . $newImageName;
 
-            // إنشاء مجلد user_scans لو مش موجود
-            if (!Storage::exists('public/uploads/user_scans')) {
-                Storage::makeDirectory('public/uploads/user_scans');
+            if (!file_exists(public_path('uploads/user_scans'))) {
+                mkdir(public_path('uploads/user_scans'), 0755, true);
             }
 
-            // نسخ الصورة من مكانها إلى مجلد user_scans
-            Storage::copy('public/uploads/' . $imageName, $newImagePath);
+            copy($imagePath, public_path($newImagePath));
 
-            // حفظ البيانات في جدول user_scans
             UserScan::create([
                 'user_id' => Auth::id(),
                 'currency_id' => $currency->id,
                 'recognized_at' => now(),
                 'accuracy' => $detections['accuracy'] ?? 0,
-                'image_url' => $finalUrl,
+                'image_url' => $newImagePath,
                 'result' => $detections['result'] ?? 'unknown',
             ]);
         }
 
         return response()->json([
-            'status' => true,
-            'message' => 'Image uploaded and detection completed',
+            'status' => $detections['status'] ?? false,
+            'message' => $detections['message'] ?? 'Detection completed',
             'data' => $detections
         ]);
     }
 
     private function runDetection($imagePath)
     {
-        $modelPath = storage_path('app/model/best.pt');
-        $scriptPath = base_path('scripts/detect.py');
+        $flaskApiUrl = 'https://ec85-34-143-137-214.ngrok-free.app/detect';
 
-        $command = "python3 " . escapeshellarg($scriptPath) . " " . escapeshellarg($imagePath) . " " . escapeshellarg($modelPath) . " 2>&1";
-        $output = shell_exec($command);
-
-        if ($output === null) {
+        if (!file_exists($imagePath)) {
             return [
                 'status' => false,
-                'message' => 'Detection process failed.',
-                'error' => 'Error executing Python script or invalid output.',
-                'output' => 'No output received from the Python script.'
+                'message' => 'File not found at path: ' . $imagePath,
+                'error' => 'File not found',
             ];
         }
 
-        $decoded = json_decode($output, true);
+        try {
+            $response = Http::attach(
+                'image',
+                fopen($imagePath, 'r'),
+                basename($imagePath)
+            )->post($flaskApiUrl);
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
+            if ($response->successful()) {
+                return $response->json();
+            } else {
+                return [
+                    'status' => false,
+                    'message' => 'Flask API error',
+                    'error' => $response->body(),
+                ];
+            }
+        } catch (\Exception $e) {
             return [
                 'status' => false,
-                'message' => 'Invalid JSON output from detection script.',
-                'error' => json_last_error_msg(),
-                'raw_output' => $output
+                'message' => 'Exception when calling Flask API',
+                'error' => $e->getMessage(),
             ];
         }
-
-        return $decoded;
     }
 }
