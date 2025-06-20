@@ -25,43 +25,27 @@ class CurrencyController extends Controller
             ], 422);
         }
 
-        // حفظ الصورة في public/uploads
         $img = $request->file('image');
-        $ext = $img->getClientOriginalExtension();
-        $imageName = time() . '.' . $ext;
-        $img->move(public_path('uploads'), $imageName);
-        $fullUrl = asset('uploads/' . $imageName);
+        $imageName = time() . '.' . $img->getClientOriginalExtension();
 
-        // تخزين بيانات الصورة في DB
+        // استدعاء Flask API مباشرة باستخدام ملف الصورة من الطلب
+        $detections = $this->runDetectionFromFile($img, $imageName);
+
+        // تخزين البيانات في قاعدة البيانات بدون رفع صورة محلياً
         $currency = new Currency;
         $currency->image = $imageName;
-        $currency->image_path = 'uploads/' . $imageName;
-        $currency->image_url = $fullUrl;
+        $currency->image_path = null; // لا يوجد مسار محلي
+        $currency->image_url = null;  // لا يوجد رابط محلي
         $currency->save();
 
-        $imagePath = public_path($currency->image_path);
-
-        // استدعاء Flask API للكشف
-        $detections = $this->runDetection($imagePath);
-
-        // لو المستخدم مسجل دخول سجل عملية الكشف
+        // إذا المستخدم مسجل دخول، سجل عملية المسح بدون نسخ صورة
         if (Auth::check()) {
-            $ext = pathinfo($imagePath, PATHINFO_EXTENSION);
-            $newImageName = 'user_' . time() . '.' . $ext;
-            $newImagePath = 'uploads/user_scans/' . $newImageName;
-
-            if (!file_exists(public_path('uploads/user_scans'))) {
-                mkdir(public_path('uploads/user_scans'), 0755, true);
-            }
-
-            copy($imagePath, public_path($newImagePath));
-
             UserScan::create([
                 'user_id' => Auth::id(),
                 'currency_id' => $currency->id,
                 'recognized_at' => now(),
                 'accuracy' => $detections['accuracy'] ?? 0,
-                'image_url' => $newImagePath,
+                'image_url' => null,
                 'result' => $detections['result'] ?? 'unknown',
             ]);
         }
@@ -73,23 +57,15 @@ class CurrencyController extends Controller
         ]);
     }
 
-    private function runDetection($imagePath)
+    private function runDetectionFromFile($file, $filename)
     {
         $flaskApiUrl = 'https://7a15-34-125-6-190.ngrok-free.app/detect';
-
-        if (!file_exists($imagePath)) {
-            return [
-                'status' => false,
-                'message' => 'File not found at path: ' . $imagePath,
-                'error' => 'File not found',
-            ];
-        }
 
         try {
             $response = Http::attach(
                 'image',
-                fopen($imagePath, 'r'),
-                basename($imagePath)
+                fopen($file->getRealPath(), 'r'),
+                $filename
             )->post($flaskApiUrl);
 
             if ($response->successful()) {
