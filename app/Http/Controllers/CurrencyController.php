@@ -41,12 +41,28 @@ class CurrencyController extends Controller
         $currency->image_url = $secureUrl;
         $currency->save();
 
-        // تحميل الصورة مؤقتًا من Cloudinary كـ stream لإرسالها إلى Flask
-        $imageStream = fopen($secureUrl, 'r');
+        // فتح الصورة من URL كـ stream
+        $imageStream = @fopen($secureUrl, 'r');
+        if ($imageStream === false) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Failed to open image stream from Cloudinary URL.',
+            ], 500);
+        }
 
         $detections = $this->runDetectionFromStream($imageStream, basename($secureUrl));
 
-        // إذا المستخدم مسجل دخول، يتم تسجيل عملية المسح
+        // ضمان أن $detections مصفوفة حتى لا يحصل خطأ
+        if (!is_array($detections)) {
+            $detections = [
+                'status' => false,
+                'message' => 'Invalid response from detection API',
+                'accuracy' => 0,
+                'result' => 'unknown',
+            ];
+        }
+
+        // تسجيل عملية المسح إذا كان المستخدم مسجل دخول
         if (Auth::check()) {
             UserScan::create([
                 'user_id' => Auth::id(),
@@ -77,7 +93,15 @@ class CurrencyController extends Controller
             )->post($flaskApiUrl);
 
             if ($response->successful()) {
-                return $response->json();
+                $json = $response->json();
+                if (is_array($json)) {
+                    return $json;
+                } else {
+                    return [
+                        'status' => false,
+                        'message' => 'Invalid JSON response from Flask API',
+                    ];
+                }
             } else {
                 return [
                     'status' => false,
