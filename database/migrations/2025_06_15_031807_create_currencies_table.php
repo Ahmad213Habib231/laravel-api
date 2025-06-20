@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('currencies', function (Blueprint $table) {
             $table->id();
-            $table->string('Country');
+            $table->string('Country')->nullable();
             $table->string('image')->nullable();
             $table->string('image_path')->nullable();
             $table->string('image_url')->nullable();
