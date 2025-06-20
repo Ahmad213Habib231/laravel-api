@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator; 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 use App\Models\Currency;
 use App\Models\UserScan;
 
@@ -14,7 +15,7 @@ class CurrencyController extends Controller
     public function uploadAndDetect(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'image' => 'required|mimes:jpg,jpeg,png',
+            'image' => 'required|mimes:jpg,jpeg,png|max:4096',
         ]);
 
         if ($validator->fails()) {
@@ -25,43 +26,34 @@ class CurrencyController extends Controller
             ], 422);
         }
 
-        // حفظ الصورة في public/uploads
-        $img = $request->file('image');
-        $ext = $img->getClientOriginalExtension();
-        $imageName = time() . '.' . $ext;
-        $img->move(public_path('uploads'), $imageName);
-        $fullUrl = asset('uploads/' . $imageName);
+        // رفع الصورة إلى Cloudinary
+        $uploadedFile = $request->file('image');
+        $cloudinaryUpload = Cloudinary::upload($uploadedFile->getRealPath(), [
+            'folder' => 'currency_uploads'
+        ]);
 
-        // تخزين بيانات الصورة في DB
+        $secureUrl = $cloudinaryUpload->getSecurePath();
+
+        // تخزين بيانات الصورة في قاعدة البيانات
         $currency = new Currency;
-        $currency->image = $imageName;
-        $currency->image_path = 'uploads/' . $imageName;
-        $currency->image_url = $fullUrl;
+        $currency->image = basename($secureUrl);
+        $currency->image_path = $secureUrl;
+        $currency->image_url = $secureUrl;
         $currency->save();
 
-        $imagePath = public_path($currency->image_path);
+        // تحميل الصورة مؤقتًا من Cloudinary كـ stream لإرسالها إلى Flask
+        $imageStream = fopen($secureUrl, 'r');
 
-        // استدعاء Flask API للكشف
-        $detections = $this->runDetection($imagePath);
+        $detections = $this->runDetectionFromStream($imageStream, basename($secureUrl));
 
-        // لو المستخدم مسجل دخول سجل عملية الكشف
+        // إذا المستخدم مسجل دخول، يتم تسجيل عملية المسح
         if (Auth::check()) {
-            $ext = pathinfo($imagePath, PATHINFO_EXTENSION);
-            $newImageName = 'user_' . time() . '.' . $ext;
-            $newImagePath = 'uploads/user_scans/' . $newImageName;
-
-            if (!file_exists(public_path('uploads/user_scans'))) {
-                mkdir(public_path('uploads/user_scans'), 0755, true);
-            }
-
-            copy($imagePath, public_path($newImagePath));
-
             UserScan::create([
                 'user_id' => Auth::id(),
                 'currency_id' => $currency->id,
                 'recognized_at' => now(),
                 'accuracy' => $detections['accuracy'] ?? 0,
-                'image_url' => $newImagePath,
+                'image_url' => $secureUrl,
                 'result' => $detections['result'] ?? 'unknown',
             ]);
         }
@@ -73,23 +65,15 @@ class CurrencyController extends Controller
         ]);
     }
 
-    private function runDetection($imagePath)
+    private function runDetectionFromStream($stream, $filename)
     {
-        $flaskApiUrl = 'https://ec85-34-143-137-214.ngrok-free.app/detect';
-
-        if (!file_exists($imagePath)) {
-            return [
-                'status' => false,
-                'message' => 'File not found at path: ' . $imagePath,
-                'error' => 'File not found',
-            ];
-        }
+        $flaskApiUrl = 'https://3607-34-143-137-214.ngrok-free.app/detect';
 
         try {
             $response = Http::attach(
                 'image',
-                fopen($imagePath, 'r'),
-                basename($imagePath)
+                $stream,
+                $filename
             )->post($flaskApiUrl);
 
             if ($response->successful()) {
