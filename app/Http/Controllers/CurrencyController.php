@@ -41,28 +41,31 @@ class CurrencyController extends Controller
         $currency->image_url = $secureUrl;
         $currency->save();
 
-        // فتح الصورة من URL كـ stream
-        $imageStream = @fopen($secureUrl, 'r');
-        if ($imageStream === false) {
+        // تحميل الصورة مؤقتًا من Cloudinary
+        $tempImagePath = tempnam(sys_get_temp_dir(), 'cloudinary_');
+        if (!copy($secureUrl, $tempImagePath)) {
             return response()->json([
                 'status' => false,
-                'message' => 'Failed to open image stream from Cloudinary URL.',
+                'message' => 'Failed to download image from Cloudinary.',
             ], 500);
         }
 
-        $detections = $this->runDetectionFromStream($imageStream, basename($secureUrl));
+        $imageStream = fopen($tempImagePath, 'r');
+        $detections = $this->runDetectionFromStream($imageStream, basename($tempImagePath));
+        fclose($imageStream);
+        unlink($tempImagePath);
 
-        // ضمان أن $detections مصفوفة حتى لا يحصل خطأ
+        // التأكد أن نتائج الكشف مصفوفة صحيحة
         if (!is_array($detections)) {
             $detections = [
                 'status' => false,
-                'message' => 'Invalid response from detection API',
+                'message' => 'Invalid detection data',
                 'accuracy' => 0,
                 'result' => 'unknown',
             ];
         }
 
-        // تسجيل عملية المسح إذا كان المستخدم مسجل دخول
+        // تسجيل المسح إذا كان المستخدم مسجل دخول
         if (Auth::check()) {
             UserScan::create([
                 'user_id' => Auth::id(),
