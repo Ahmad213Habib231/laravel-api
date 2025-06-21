@@ -59,7 +59,7 @@ class CurrencyController extends Controller
 
     private function runDetectionFromFile($file, $filename)
     {
-        $flaskApiUrl = 'https://ab56-34-150-207-115.ngrok-free.app/detect';
+        $flaskApiUrl = 'https://7085-35-201-176-97.ngrok-free.app/detect';
 
         try {
             $response = Http::attach(
