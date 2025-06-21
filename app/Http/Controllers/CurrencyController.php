@@ -31,6 +31,16 @@ class CurrencyController extends Controller
         // استدعاء Flask API مباشرة باستخدام ملف الصورة من الطلب
         $detections = $this->runDetectionFromFile($img, $imageName);
 
+        // تعديل الاسم داخل النتيجة بحذف EGP أو egp (أو أي حالة أحرف أخرى)
+        if (isset($detections['result']) && is_array($detections['result'])) {
+            foreach ($detections['result'] as &$item) {
+                if (isset($item['name'])) {
+                    $item['name'] = str_ireplace('egp', '', $item['name']);
+                    $item['name'] = trim($item['name']);
+                }
+            }
+        }
+
         // تخزين البيانات في قاعدة البيانات بدون رفع صورة محلياً
         $currency = new Currency;
         $currency->image = $imageName;
@@ -59,7 +69,7 @@ class CurrencyController extends Controller
 
     private function runDetectionFromFile($file, $filename)
     {
-        $flaskApiUrl = 'https://715e-35-245-170-42.ngrok-free.app/detect';
+        $flaskApiUrl = 'https://c7ab-35-245-170-42.ngrok-free.app/detect';
 
         try {
             $response = Http::attach(
